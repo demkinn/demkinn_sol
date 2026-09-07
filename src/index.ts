@@ -2,6 +2,7 @@ import { alert } from './alerts.js';
 import { config } from './config.js';
 import { getCandidates } from './jupiter.js';
 import { log, warn } from './logger.js';
+import { appendJsonl, performanceSnapshot, scanRecord } from './metrics.js';
 import { dailyLossPct, equitySol, tradingAllowed } from './risk.js';
 import { rank } from './strategy.js';
 import { loadState, saveState } from './state.js';
@@ -9,6 +10,8 @@ import { managePaperPosition, openPaperPosition, portfolioSnapshot } from './tra
 
 const state = loadState(config.startingEquitySol);
 const today = () => new Date().toISOString().slice(0, 10);
+const scansFile = process.env.DEMKINN_SCANS_FILE ?? 'demkinn-scans.jsonl';
+const performanceFile = process.env.DEMKINN_PERFORMANCE_FILE ?? 'demkinn-performance.jsonl';
 
 function rollDay(): void {
   const d = today();
@@ -37,6 +40,8 @@ async function tick(): Promise<void> {
 
   const ranked = rank(tokens);
   const best = ranked[0];
+  appendJsonl(scansFile, scanRecord(ranked, tokens.length));
+  appendJsonl(performanceFile, performanceSnapshot(state));
   log(`${config.botName}: scanned=${tokens.length} qualified=${ranked.length} ${portfolioSnapshot(state)}`);
   if (best && best.score >= config.entryScoreMin && tradingAllowed(state)) {
     log(`SETUP ${best.symbol ?? best.id.slice(0, 8)} score=${best.score}`, best.reasons);
