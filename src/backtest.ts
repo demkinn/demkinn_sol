@@ -52,8 +52,8 @@ interface ExitResult {
 }
 
 function elapsedMinutes(timestampsMs: number[] | undefined, index: number): number {
-  if (!timestampsMs || timestampsMs.length !== index + 1) return index + 1;
-  const first = timestampsMs[index === 0 ? 0 : 0];
+  if (!timestampsMs || timestampsMs.length === 0) return index + 1;
+  const first = timestampsMs[0];
   const current = timestampsMs[index];
   if (first === undefined || current === undefined || !Number.isFinite(first) || !Number.isFinite(current) || current < first) return index + 1;
   return (current - first) / 60_000;
