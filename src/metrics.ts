@@ -1,10 +1,12 @@
 import { appendFileSync } from 'node:fs';
 import type { Candidate, PortfolioState } from './types.js';
+import type { RejectionReason } from './strategy.js';
 
 export interface ScanRecord {
   timestamp: number;
   scanned: number;
   qualified: number;
+  rejectionReasons: Partial<Record<RejectionReason, number>>;
   best?: { mint: string; symbol: string; score: number; price?: number; liquidity?: number; momentum5m: number; buySellRatio: number; netBuyers5m: number };
 }
 
@@ -19,6 +21,8 @@ export interface PerformanceSnapshot {
   openPositions: number;
   tradesToday: number;
   winRatePct: number;
+  paused: boolean;
+  consecutiveFailures: number;
 }
 
 export function unrealizedPnlSol(state: PortfolioState): number {
@@ -38,13 +42,15 @@ export function performanceSnapshot(state: PortfolioState): PerformanceSnapshot 
     openPositions: state.positions.length,
     tradesToday: state.tradesToday,
     winRatePct: closed ? (state.winningTrades / closed) * 100 : 0,
+    paused: state.paused,
+    consecutiveFailures: state.consecutiveFailures,
   };
 }
 
-export function scanRecord(tokens: Candidate[], scanned: number): ScanRecord {
+export function scanRecord(tokens: Candidate[], scanned: number, rejectionReasons: Partial<Record<RejectionReason, number>> = {}): ScanRecord {
   const best = tokens[0];
   return {
-    timestamp: Date.now(), scanned, qualified: tokens.length,
+    timestamp: Date.now(), scanned, qualified: tokens.length, rejectionReasons,
     best: best ? { mint: best.id, symbol: best.symbol ?? best.id.slice(0, 8), score: best.score,
       price: best.usdPrice, liquidity: best.liquidity, momentum5m: best.momentum5m,
       buySellRatio: best.buySellRatio, netBuyers5m: best.netBuyers5m } : undefined,
