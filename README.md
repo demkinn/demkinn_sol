@@ -1,6 +1,6 @@
-# Demkinn SOL — V1.2 Paper Memecoin Trader
+# Demkinn SOL — V1.3 Paper Memecoin Trader
 
-Demkinn is a **paper-only Solana memecoin trading engine**. It watches Jupiter Tokens V2 feeds, filters candidates, scores momentum/flow/liquidity/organic activity, simulates fills with fees + slippage, manages positions, persists state, records telemetry, and includes a replay backtest engine.
+Demkinn is a **paper-only Solana memecoin trading engine**. It watches configured Jupiter Tokens V2 feeds, filters candidates, scores momentum/flow/liquidity/organic activity, simulates fills with fees + slippage, manages positions, persists state, records telemetry, and includes a replay backtest engine.
 
 This release deliberately contains **no live-order execution path**.
 
@@ -26,24 +26,30 @@ Demkinn is designed as a selective momentum/flow system, not a "buy every green 
 | Token age | 5 min to 7 days |
 | Entry score | 78/100 |
 | Stop | -12% |
-| TP1 | +25%, close 40% |
-| TP2 | +60%, close 30% |
+| TP1 | +25%, close 40% of original position |
+| TP2 | +60%, close 30% of original position |
 | Trailing | activates +12%, exits on 15% pullback |
 | Time stop | 45 min if still below +10% |
 | Paper fee model | 10 bps |
 
 These values are a **starting hypothesis, not a claim of optimality or profitability**. Memecoins are exceptionally risky.
 
-## V1.2 additions
+## V1.3 additions
+
+### Deterministic strategy diagnostics
+Every rejected token can now be attributed to a first failing gate such as liquidity, organic score, momentum, buy/sell ratio, concentration, or authority status. Scan telemetry records these rejection counts alongside the best qualified setup.
 
 ### Mark-to-market risk
 Open positions are valued using their latest observed market price. Daily loss and position sizing therefore see unrealized PnL instead of treating open positions as if they were still worth their entry cost.
 
-### Telemetry
-`src/metrics.ts` provides performance snapshots and JSONL append helpers. The intended telemetry fields include equity, cash, unrealized/realized PnL, fees, slippage, open positions, trades, win rate, and best candidate per scan.
+### Safer persistence
+Persisted state is validated before use. Invalid positions/trades are discarded rather than blindly trusted, and state writes remain atomic through a temporary file + rename.
 
-### Replay engine
-`src/backtest.ts` replays a candidate's entry price against a supplied sequence of later prices using the same core TP/SL/trailing/time-stop logic. It reports win rate, net PnL, expectancy, profit factor, max drawdown, best/worst trade and exit-reason counts.
+### Graceful shutdown
+SIGINT/SIGTERM persist state before exit. Unexpected exceptions/rejections are recorded as system failures so the existing three-failure pause mechanism remains effective.
+
+### Replay realism
+`src/backtest.ts` now models entry/exit fees and slippage, reports average winner/loser and total execution costs, and accepts optional millisecond timestamps. Timestamped replay cases use elapsed time for the time-stop instead of assuming every array element represents one minute.
 
 Run it with:
 
@@ -59,12 +65,15 @@ Input format:
     "id": "mint-address",
     "symbol": "MEME",
     "entryPrice": 0.001,
-    "prices": [0.00105, 0.0012, 0.0014, 0.0011]
+    "prices": [0.00105, 0.0012, 0.0014, 0.0011],
+    "timestampsMs": [1725796800000, 1725796860000, 1725796920000, 1725796980000]
   }
 ]
 ```
 
-This is a **replay simulator**, not a claim of historical profitability. Results depend entirely on the supplied price path and do not model every market microstructure effect.
+`timestampsMs` is optional for backwards compatibility. Without it, replay steps are treated as one-minute intervals. Replay slippage is controlled by `BACKTEST_SLIPPAGE_BPS` and capped by the paper slippage ceiling.
+
+This is a **replay simulator**, not a claim of historical profitability. Results depend entirely on supplied data and still cannot model every market microstructure, routing, MEV, or liquidity effect.
 
 ## V1 architecture
 
@@ -73,7 +82,7 @@ Jupiter Tokens V2
       ↓
 4 paced market feeds
       ↓
-Safety gates
+Safety gates + rejection diagnostics
       ↓
 Demkinn Score (0–100)
       ↓
@@ -87,7 +96,7 @@ Paper broker
       ↓
 Position manager
       ↓
-Telemetry + persistent JSON state
+Telemetry + validated persistent JSON state
       ↓
 Telegram alerts
 
@@ -109,14 +118,18 @@ npm run build
 npm start
 ```
 
-## State and data
+## Runtime outputs
 
-The bot persists to `demkinn-state.json` by default. It records cash, realized PnL, fees, simulated slippage, open positions, entry/exit trades, wins/losses, daily risk state, and pause state. Runtime state is ignored by Git.
+The bot keeps runtime files local and out of Git:
 
-For research, retain the candidate snapshots/price paths separately so the replay engine can be used for parameter analysis without changing the live paper strategy.
+- `demkinn-state.json` — cash, open positions, realized PnL, costs, wins/losses and pause state.
+- `demkinn-scans.jsonl` — scan count, qualified count, best candidate and rejection reasons.
+- `demkinn-performance.jsonl` — periodic equity/PnL/cost snapshots.
 
-## Evaluation
+These files are useful as the raw dataset for future threshold analysis and replay.
 
-Do not optimize for the biggest single winner. Track expectancy, win rate, average winner vs average loser, profit factor, maximum drawdown, trade frequency, exit reasons, and how often entries reverse immediately.
+## Safety boundary
 
-The recommended progression is: collect data → replay/backtest → tune thresholds → forward paper test again → only then consider any live execution work.
+V1.x is paper-only. There is no wallet signer, transaction builder, swap submission, or live-order execution module in this release. Do not interpret paper results as evidence of profitability.
+
+The recommended progression is: collect a meaningful sample of forward paper data → replay/backtest it with costs → examine expectancy, drawdown and exit reasons → retest after parameter changes → only then evaluate whether a separate, explicitly gated execution layer should ever be designed.
