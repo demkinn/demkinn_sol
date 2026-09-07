@@ -2,7 +2,7 @@ import { config } from './config.js';
 import type { PortfolioState } from './types.js';
 
 export function equitySol(state: PortfolioState): number {
-  return state.cashSol + state.positions.reduce((sum, p) => sum + p.remainingCostSol, 0);
+  return state.cashSol + state.positions.reduce((sum, p) => sum + (p.tokenQty * p.lastPrice), 0);
 }
 
 export function dailyLossPct(state: PortfolioState): number {
