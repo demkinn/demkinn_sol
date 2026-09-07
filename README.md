@@ -1,90 +1,100 @@
-# Demkinn — Solana Memecoin Trading Bot
+# Demkinn SOL — V1 Paper Memecoin Trader
 
-Demkinn is a risk-first, momentum-based Solana memecoin trader. It discovers candidates from Jupiter Tokens V2, scores them using liquidity/flow/organic activity/security signals, and executes swaps through Jupiter Swap V2.
+Demkinn is a **paper-only Solana memecoin trading engine**. V1 watches Jupiter Tokens V2 feeds, filters candidates, scores momentum/flow/liquidity/organic activity, simulates fills with fees + slippage, manages positions, persists state, and sends optional Telegram alerts.
 
-> **Important:** this is trading software, not a profit guarantee. Memecoins can lose most or all of their value extremely quickly. The default mode is `paper` and should stay that way until the strategy is tested extensively.
+This release deliberately contains **no live-order execution path**. That keeps the first iteration testable without risking real funds.
 
-## Strategy profile
+## Strategy
 
-| Component | Default |
+Demkinn is designed as a selective momentum/flow system, not a "buy every green candle" bot.
+
+| Rule | Default |
 |---|---:|
-| Risk per trade | 0.75% |
-| Max simultaneous positions | 3 |
-| Daily loss kill-switch | 4% |
-| Max position | 1.5% of equity |
-| Minimum liquidity | $75k |
-| Minimum organic score | 55/100 |
-| Minimum 5m volume | $25k |
-| Minimum 5m momentum | +3% |
-| Maximum 5m momentum | +35% |
-| Minimum 5m net buyers | 12 |
-| Minimum buy/sell volume ratio | 1.20 |
+| Starting paper equity | 10 SOL |
+| Risk budget | 0.75% equity/trade |
+| Max position | 1.50% equity |
+| Max open positions | 3 |
+| Daily kill switch | -4% |
+| Min liquidity | $75k |
+| Max liquidity | $15M |
+| Market cap | $100k–$30M |
+| Min holders | 250 |
+| Min organic score | 55 |
+| 5m volume | $25k+ |
+| 5m buy/sell ratio | 1.20x+ |
+| 5m net buyers | 12+ |
+| 5m momentum | +3% to +35% |
+| Token age | 5 min to 7 days |
 | Entry score | 78/100 |
-| Hard stop | -12% |
-| TP1 | +25%, sell 40% |
-| TP2 | +60%, sell 30% |
-| Trailing stop | 15% from high |
-| Time stop | 45 minutes |
+| Stop | -12% |
+| TP1 | +25%, close 40% |
+| TP2 | +60%, close 30% |
+| Trailing | activates +12%, exits on 15% pullback |
+| Time stop | 45 min if still below +10% |
+| Paper fee model | 10 bps |
 
-No trade is a valid trade. These are disciplined starting parameters, not claims of guaranteed optimality.
+These values are a **starting hypothesis, not a claim of optimality or profitability**. Memecoins are exceptionally risky.
 
-## Architecture
+## V1 architecture
 
 ```text
-Jupiter Tokens V2 → Candidate scanner → Safety gates + scoring
-                                   ↓
-                             Risk manager
-                                   ↓
-                     Paper broker / Jupiter Swap V2
-                                   ↓
-                         Position manager
-                                   ↓
-                         Persistent JSON state
-                                   ↓
-                           Telegram alerts
+Jupiter Tokens V2
+      ↓
+4 paced market feeds
+      ↓
+Safety gates
+      ↓
+Demkinn Score (0–100)
+      ↓
+Risk manager
+      ↓
+Paper broker
+  • virtual fills
+  • fees
+  • slippage
+  • real token quantities
+      ↓
+Position manager
+      ↓
+Persistent JSON state
+      ↓
+Telegram alerts
 ```
 
-## Install
+## Why the V1 paper broker matters
+
+The earlier prototype used an artificial quantity of `1` and could value a position at its historical high. V1 fixes both problems. Every simulated buy creates a real virtual token quantity based on the candidate price and trade size; exits use the current observed price, and PnL is tracked from realized proceeds after fees/slippage.
+
+## Current Jupiter integration
+
+Jupiter documents `https://api.jup.ag` as the current Developer Platform base URL. Tokens V2 exposes recent tokens plus category feeds for `toptrending`, `toptraded`, and `toporganicscore` across intervals including `5m`. Jupiter's documentation also notes that `/recent` is ordered by first pool creation time, not mint creation time. V1 uses those feeds and deliberately paces requests so a free API key does not burst four calls at once.
+
+References:
+- https://developers.jup.ag/docs/api-reference/tokens/recent
+- https://developers.jup.ag/docs/guides/how-to-get-token-information
+- https://developers.jup.ag/changelog/developer-platform
+
+## Setup
 
 1. Install Node.js 22+.
 2. Copy `.env.example` to `.env`.
-3. Add a Jupiter API key.
-4. Leave `TRADING_MODE=paper`.
-5. Run:
+3. Create a Jupiter Developer Platform API key.
+4. Keep the default 10 SOL paper balance until you have enough observations.
+5. Install/build:
 
 ```bash
 npm install
+npm test
 npm run build
 npm start
 ```
 
-## Going live
+## State
 
-Only after extensive paper testing:
+The bot persists to `demkinn-state.json` by default. It records cash, realized PnL, fees, simulated slippage, open positions, entry/exit trades, wins/losses, daily risk state, and pause state. The file is ignored by Git.
 
-```env
-TRADING_MODE=live
-WALLET_PRIVATE_KEY=...
-```
+## What to evaluate during paper testing
 
-Use a dedicated hot wallet containing only funds you can afford to lose. Never put a seed phrase or private key in GitHub. Never commit `.env`.
+Do not optimize for the biggest single winner. Track expectancy, win rate, average winner vs average loser, maximum drawdown, number of trades, and how often the model enters after a sharp move that immediately reverses.
 
-## APIs
-
-Demkinn uses Jupiter's Swap V2 `/order` + `/execute` flow and Jupiter Tokens V2 for token discovery and market/security signals.
-
-Official docs:
-
-- https://developers.jup.ag/docs/swap/order-and-execute
-- https://developers.jup.ag/docs/guides/how-to-get-token-information
-- https://solana.com/docs/clients/official/javascript
-
-## Next upgrades
-
-1. SQLite/Postgres trade journal and PnL reconciliation.
-2. Historical snapshot replay and backtesting.
-3. Second independent price source.
-4. Chain-level wallet/PnL reconciliation.
-5. Execution-failure circuit breaker.
-6. Telegram `/pause`, `/resume`, `/status`, `/positions` commands.
-7. Shadow-mode comparison of multiple strategy variants.
+A sensible next research step is a replay/backtest dataset built from historical candidate snapshots. Only after that should live execution be considered.
