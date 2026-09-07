@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { evaluate, evaluateDetailed, rank, rejectionCounts } from '../src/strategy.js';
 import type { MemeToken } from '../src/types.js';
 
-const now = Date.parse('2026-09-08T12:00:00Z');
+const now = Date.now();
 const base = (): MemeToken => ({
   id: 'Mint111111111111111111111111111111111111111', decimals: 9, symbol: 'TEST', usdPrice: 1,
   liquidity: 1_000_000, mcap: 3_000_000, holderCount: 5000, organicScore: 95,
