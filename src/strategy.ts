@@ -1,17 +1,40 @@
 import { config } from './config.js';
 import type { Candidate, MemeToken } from './types.js';
 
-const ageMinutes = (token: MemeToken): number => {
+export type RejectionReason =
+  | 'missing_id'
+  | 'banned'
+  | 'suspicious'
+  | 'mint_authority'
+  | 'freeze_authority'
+  | 'liquidity'
+  | 'market_cap'
+  | 'holders'
+  | 'organic_score'
+  | 'concentration'
+  | 'dev_balance'
+  | 'age'
+  | 'momentum'
+  | 'volume'
+  | 'buy_sell_ratio'
+  | 'net_buyers';
+
+export interface Evaluation {
+  candidate: Candidate | null;
+  rejectionReason?: RejectionReason;
+}
+
+const ageMinutes = (token: MemeToken, nowMs = Date.now()): number => {
   const createdAt = token.firstPool?.createdAt ?? token.createdAt;
   if (!createdAt) return Number.POSITIVE_INFINITY;
   const parsed = Date.parse(createdAt);
-  return Number.isFinite(parsed) ? Math.max(0, (Date.now() - parsed) / 60_000) : Number.POSITIVE_INFINITY;
+  return Number.isFinite(parsed) ? Math.max(0, (nowMs - parsed) / 60_000) : Number.POSITIVE_INFINITY;
 };
 
-export function evaluate(token: MemeToken): Candidate | null {
+export function evaluateDetailed(token: MemeToken, nowMs = Date.now()): Evaluation {
   const s = token.stats5m ?? {};
   const audit = token.audit ?? {};
-  const age = ageMinutes(token);
+  const age = ageMinutes(token, nowMs);
   const liquidity = token.liquidity ?? 0;
   const mcap = token.mcap ?? 0;
   const holders = token.holderCount ?? 0;
@@ -23,18 +46,22 @@ export function evaluate(token: MemeToken): Candidate | null {
   const ratio = sellVol > 0 ? buyVol / sellVol : buyVol > 0 ? 99 : 0;
   const netBuyers = s.numNetBuyers ?? ((s.numBuys ?? 0) - (s.numSells ?? 0));
 
-  if (!token.id || token.verification === 'banned') return null;
-  if (config.rejectSuspicious && audit.isSus === true) return null;
-  if (config.requireMintAuthorityDisabled && audit.mintAuthorityDisabled === false) return null;
-  if (config.requireFreezeAuthorityDisabled && audit.freezeAuthorityDisabled === false) return null;
-  if (liquidity < config.minLiquidityUsd || liquidity > config.maxLiquidityUsd) return null;
-  if (mcap < config.minMarketCapUsd || mcap > config.maxMarketCapUsd) return null;
-  if (holders < config.minHolders || organic < config.minOrganicScore) return null;
-  if (audit.topHoldersPercentage !== undefined && audit.topHoldersPercentage > config.maxTopHoldersPct) return null;
-  if (audit.devBalancePercentage !== undefined && audit.devBalancePercentage > config.maxDevBalancePct) return null;
-  if (age < config.minTokenAgeMin || age > config.maxTokenAgeHours * 60) return null;
-  if (momentum < config.minMomentum5mPct || momentum > config.maxMomentum5mPct) return null;
-  if (volume < config.minVolume5mUsd || ratio < config.minBuySellRatio || netBuyers < config.minNetBuyers5m) return null;
+  if (!token.id) return { candidate: null, rejectionReason: 'missing_id' };
+  if (token.verification === 'banned') return { candidate: null, rejectionReason: 'banned' };
+  if (config.rejectSuspicious && audit.isSus === true) return { candidate: null, rejectionReason: 'suspicious' };
+  if (config.requireMintAuthorityDisabled && audit.mintAuthorityDisabled === false) return { candidate: null, rejectionReason: 'mint_authority' };
+  if (config.requireFreezeAuthorityDisabled && audit.freezeAuthorityDisabled === false) return { candidate: null, rejectionReason: 'freeze_authority' };
+  if (liquidity < config.minLiquidityUsd || liquidity > config.maxLiquidityUsd) return { candidate: null, rejectionReason: 'liquidity' };
+  if (mcap < config.minMarketCapUsd || mcap > config.maxMarketCapUsd) return { candidate: null, rejectionReason: 'market_cap' };
+  if (holders < config.minHolders) return { candidate: null, rejectionReason: 'holders' };
+  if (organic < config.minOrganicScore) return { candidate: null, rejectionReason: 'organic_score' };
+  if (audit.topHoldersPercentage !== undefined && audit.topHoldersPercentage > config.maxTopHoldersPct) return { candidate: null, rejectionReason: 'concentration' };
+  if (audit.devBalancePercentage !== undefined && audit.devBalancePercentage > config.maxDevBalancePct) return { candidate: null, rejectionReason: 'dev_balance' };
+  if (age < config.minTokenAgeMin || age > config.maxTokenAgeHours * 60) return { candidate: null, rejectionReason: 'age' };
+  if (momentum < config.minMomentum5mPct || momentum > config.maxMomentum5mPct) return { candidate: null, rejectionReason: 'momentum' };
+  if (volume < config.minVolume5mUsd) return { candidate: null, rejectionReason: 'volume' };
+  if (ratio < config.minBuySellRatio) return { candidate: null, rejectionReason: 'buy_sell_ratio' };
+  if (netBuyers < config.minNetBuyers5m) return { candidate: null, rejectionReason: 'net_buyers' };
 
   let score = 0;
   const reasons: string[] = [];
@@ -60,9 +87,22 @@ export function evaluate(token: MemeToken): Candidate | null {
   score += safetyScore;
   if (safetyScore >= 6) reasons.push('distribution healthy');
 
-  return { ...token, score: Math.round(score * 100) / 100, reasons, ageMinutes: age, buySellRatio: ratio, netBuyers5m: netBuyers, volume5m: volume, momentum5m: momentum };
+  return { candidate: { ...token, score: Math.round(score * 100) / 100, reasons, ageMinutes: age, buySellRatio: ratio, netBuyers5m: netBuyers, volume5m: volume, momentum5m: momentum } };
+}
+
+export function evaluate(token: MemeToken): Candidate | null {
+  return evaluateDetailed(token).candidate;
 }
 
 export function rank(tokens: MemeToken[]): Candidate[] {
   return tokens.map(evaluate).filter((x): x is Candidate => x !== null).sort((a, b) => b.score - a.score);
+}
+
+export function rejectionCounts(tokens: MemeToken[]): Record<RejectionReason, number> {
+  const counts = {} as Record<RejectionReason, number>;
+  for (const token of tokens) {
+    const result = evaluateDetailed(token);
+    if (result.rejectionReason) counts[result.rejectionReason] = (counts[result.rejectionReason] ?? 0) + 1;
+  }
+  return counts;
 }
