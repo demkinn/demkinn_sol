@@ -62,5 +62,37 @@ export const config = {
   rejectSuspicious: bool('REJECT_SUSPICIOUS', true),
 } as const;
 
+const positive = [
+  ['SCAN_INTERVAL_MS', config.scanIntervalMs], ['API_MIN_INTERVAL_MS', config.apiMinIntervalMs],
+  ['STARTING_EQUITY_SOL', config.startingEquitySol], ['MIN_TRADE_SOL', config.minTradeSol],
+  ['MAX_TRADE_SOL', config.maxTradeSol], ['MIN_LIQUIDITY_USD', config.minLiquidityUsd],
+  ['MAX_LIQUIDITY_USD', config.maxLiquidityUsd], ['MIN_MARKET_CAP_USD', config.minMarketCapUsd],
+  ['MAX_MARKET_CAP_USD', config.maxMarketCapUsd], ['MIN_HOLDERS', config.minHolders],
+  ['MIN_VOLUME_5M_USD', config.minVolume5mUsd], ['MIN_TOKEN_AGE_MIN', config.minTokenAgeMin],
+  ['MAX_TOKEN_AGE_HOURS', config.maxTokenAgeHours], ['ENTRY_SCORE_MIN', config.entryScoreMin],
+  ['STOP_LOSS_PCT', config.stopLossPct], ['TP1_PCT', config.tp1Pct], ['TP2_PCT', config.tp2Pct],
+  ['TRAILING_STOP_PCT', config.trailingStopPct], ['TRAILING_ACTIVATION_PCT', config.trailingActivationPct],
+  ['TIME_STOP_MIN', config.timeStopMin],
+] as const;
+for (const [name, value] of positive) if (value <= 0) throw new Error(`${name} must be > 0`);
+
+if (config.maxTradeSol < config.minTradeSol) throw new Error('MAX_TRADE_SOL must be >= MIN_TRADE_SOL');
+if (config.maxLiquidityUsd <= config.minLiquidityUsd) throw new Error('MAX_LIQUIDITY_USD must exceed MIN_LIQUIDITY_USD');
+if (config.maxMarketCapUsd <= config.minMarketCapUsd) throw new Error('MAX_MARKET_CAP_USD must exceed MIN_MARKET_CAP_USD');
+if (config.maxOpenPositions < 1) throw new Error('MAX_OPEN_POSITIONS must be >= 1');
+if (config.riskPerTradePct <= 0 || config.riskPerTradePct > 100) throw new Error('RISK_PER_TRADE_PCT must be in (0,100]');
+if (config.maxPositionPct <= 0 || config.maxPositionPct > 100) throw new Error('MAX_POSITION_PCT must be in (0,100]');
+if (config.maxDailyLossPct <= 0 || config.maxDailyLossPct > 100) throw new Error('MAX_DAILY_LOSS_PCT must be in (0,100]');
+if (config.minBuySellRatio <= 0) throw new Error('MIN_BUY_SELL_RATIO must be > 0');
+if (config.minMomentum5mPct < -100 || config.maxMomentum5mPct <= config.minMomentum5mPct) throw new Error('Momentum bounds are invalid');
+if (config.minTokenAgeMin >= config.maxTokenAgeHours * 60) throw new Error('Token age bounds are invalid');
+if (config.entryScoreMin > 100) throw new Error('ENTRY_SCORE_MIN must be <= 100');
+if (config.tp1SellPct <= 0 || config.tp1SellPct >= 100 || config.tp2SellPct <= 0 || config.tp2SellPct >= 100 || config.tp1SellPct + config.tp2SellPct >= 100) {
+  throw new Error('TP sell fractions must be in (0,100) and leave some position for stops');
+}
+if (config.tp2Pct <= config.tp1Pct) throw new Error('TP2_PCT must exceed TP1_PCT');
+if (config.trailingActivationPct <= 0 || config.trailingStopPct <= 0) throw new Error('Trailing thresholds must be > 0');
+if (config.paperFeeBps < 0 || config.paperMaxSlippageBps < 0) throw new Error('Paper fee/slippage cannot be negative');
+if (config.paperMinFillRatio <= 0 || config.paperMinFillRatio > 1) throw new Error('PAPER_MIN_FILL_RATIO must be in (0,1]');
+
 if (!config.jupiterApiKey) console.warn('[WARN] JUPITER_API_KEY is missing. Paper scanner will not receive live candidates.');
-if (config.startingEquitySol <= 0) throw new Error('STARTING_EQUITY_SOL must be > 0');
