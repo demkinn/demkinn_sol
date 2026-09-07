@@ -57,6 +57,7 @@ export const config = {
   paperFeeBps: num('PAPER_FEE_BPS', 10),
   paperMaxSlippageBps: num('PAPER_MAX_SLIPPAGE_BPS', 80),
   paperMinFillRatio: num('PAPER_MIN_FILL_RATIO', 0.70),
+  backtestSlippageBps: num('BACKTEST_SLIPPAGE_BPS', 25),
   requireMintAuthorityDisabled: bool('REQUIRE_MINT_AUTHORITY_DISABLED', true),
   requireFreezeAuthorityDisabled: bool('REQUIRE_FREEZE_AUTHORITY_DISABLED', true),
   rejectSuspicious: bool('REJECT_SUSPICIOUS', true),
@@ -92,7 +93,8 @@ if (config.tp1SellPct <= 0 || config.tp1SellPct >= 100 || config.tp2SellPct <= 0
 }
 if (config.tp2Pct <= config.tp1Pct) throw new Error('TP2_PCT must exceed TP1_PCT');
 if (config.trailingActivationPct <= 0 || config.trailingStopPct <= 0) throw new Error('Trailing thresholds must be > 0');
-if (config.paperFeeBps < 0 || config.paperMaxSlippageBps < 0) throw new Error('Paper fee/slippage cannot be negative');
+if (config.paperFeeBps < 0 || config.paperMaxSlippageBps < 0 || config.backtestSlippageBps < 0) throw new Error('Execution costs cannot be negative');
+if (config.backtestSlippageBps > config.paperMaxSlippageBps) throw new Error('BACKTEST_SLIPPAGE_BPS cannot exceed PAPER_MAX_SLIPPAGE_BPS');
 if (config.paperMinFillRatio <= 0 || config.paperMinFillRatio > 1) throw new Error('PAPER_MIN_FILL_RATIO must be in (0,1]');
 
 if (!config.jupiterApiKey) console.warn('[WARN] JUPITER_API_KEY is missing. Paper scanner will not receive live candidates.');
