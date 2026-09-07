@@ -1,4 +1,4 @@
-import { writeFileSync } from 'node:fs';
+import { appendFileSync } from 'node:fs';
 import type { Candidate, PortfolioState } from './types.js';
 
 export interface ScanRecord {
@@ -41,7 +41,16 @@ export function performanceSnapshot(state: PortfolioState): PerformanceSnapshot 
   };
 }
 
+export function scanRecord(tokens: Candidate[], scanned: number): ScanRecord {
+  const best = tokens[0];
+  return {
+    timestamp: Date.now(), scanned, qualified: tokens.length,
+    best: best ? { mint: best.id, symbol: best.symbol ?? best.id.slice(0, 8), score: best.score,
+      price: best.usdPrice, liquidity: best.liquidity, momentum5m: best.momentum5m,
+      buySellRatio: best.buySellRatio, netBuyers5m: best.netBuyers5m } : undefined,
+  };
+}
+
 export function appendJsonl(file: string, value: unknown): void {
-  writeFileSync(file, '', { flag: 'a', mode: 0o600 });
-  writeFileSync(file, `${JSON.stringify(value)}\n`, { flag: 'a', mode: 0o600 });
+  appendFileSync(file, `${JSON.stringify(value)}\n`, { mode: 0o600 });
 }
