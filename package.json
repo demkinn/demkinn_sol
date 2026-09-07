@@ -1,0 +1,23 @@
+{
+  "name": "demkinn-meme-bot",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Demkinn — risk-first Solana memecoin momentum trader using Jupiter Swap V2.",
+  "type": "module",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/index.js",
+    "dev": "node --watch --enable-source-maps dist/index.js",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@solana/web3.js": "1.98.4",
+    "dotenv": "17.4.2",
+    "bs58": "6.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.9.2"
+  }
+}
