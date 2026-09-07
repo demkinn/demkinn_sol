@@ -40,46 +40,48 @@ function exitOne(entry: number, prices: number[]): { pnlPct: number; reason: str
   let tp1 = false;
   let tp2 = false;
 
-  const sell = (price: number, fraction: number, reason: string, step: number) => {
+  const sell = (price: number, fraction: number, reason: string) => {
     const pnl = ((price - entry) / entry) * fraction;
     realized += pnl;
-    remaining -= fraction;
-    return { pnl, reason, step };
+    remaining = Math.max(0, remaining - fraction);
+    return { pnl, reason };
   };
 
   for (let i = 0; i < prices.length; i += 1) {
     const price = prices[i];
-    if (!Number.isFinite(price) || price <= 0) continue;
+    if (typeof price !== 'number' || !Number.isFinite(price) || price <= 0) continue;
+
     high = Math.max(high, price);
     const pnlPct = ((price - entry) / entry) * 100;
     const ddPct = ((high - price) / high) * 100;
 
     if (!tp1 && pnlPct >= config.tp1Pct) {
       tp1 = true;
-      sell(price, config.tp1SellPct / 100, `TP1 +${pnlPct.toFixed(1)}%`, i);
+      sell(price, config.tp1SellPct / 100, `TP1 +${pnlPct.toFixed(1)}%`);
     }
     if (!tp2 && pnlPct >= config.tp2Pct) {
       tp2 = true;
-      sell(price, config.tp2SellPct / 100, `TP2 +${pnlPct.toFixed(1)}%`, i);
+      sell(price, config.tp2SellPct / 100, `TP2 +${pnlPct.toFixed(1)}%`);
     }
     if (pnlPct <= -config.stopLossPct) {
-      const r = sell(price, remaining, `STOP ${pnlPct.toFixed(1)}%`, i);
+      const r = sell(price, remaining, `STOP ${pnlPct.toFixed(1)}%`);
       return { pnlPct: realized * 100, reason: r.reason, holdSteps: i + 1 };
     }
     if (high > entry * (1 + config.trailingActivationPct / 100) && ddPct >= config.trailingStopPct) {
-      const r = sell(price, remaining, `TRAIL -${ddPct.toFixed(1)}%`, i);
+      const r = sell(price, remaining, `TRAIL -${ddPct.toFixed(1)}%`);
       return { pnlPct: realized * 100, reason: r.reason, holdSteps: i + 1 };
     }
     if (i + 1 >= config.timeStopMin && pnlPct < 10) {
-      const r = sell(price, remaining, `TIME ${i + 1} steps`, i);
+      const r = sell(price, remaining, `TIME ${i + 1} steps`);
       return { pnlPct: realized * 100, reason: r.reason, holdSteps: i + 1 };
     }
     if (remaining <= 0.000001) return { pnlPct: realized * 100, reason: 'TARGETS', holdSteps: i + 1 };
   }
 
-  const last = prices[prices.length - 1];
-  const final = Number.isFinite(last) && last > 0 ? ((last - entry) / entry) * remaining : 0;
-  realized += final;
+  const last = prices.at(-1);
+  if (typeof last === 'number' && Number.isFinite(last) && last > 0) {
+    realized += ((last - entry) / entry) * remaining;
+  }
   return { pnlPct: realized * 100, reason: 'END', holdSteps: prices.length };
 }
 
@@ -105,7 +107,10 @@ export function runBacktest(cases: ReplayCase[], stakeSol = 0.1): { report: Back
   const grossLoss = Math.abs(losses.reduce((s, t) => s + t.pnlSol, 0));
   const netPnlSol = trades.reduce((s, t) => s + t.pnlSol, 0);
   const byReason: Record<string, number> = {};
-  for (const t of trades) byReason[t.reason.split(' ')[0]] = (byReason[t.reason.split(' ')[0]] ?? 0) + 1;
+  for (const t of trades) {
+    const reasonKey = t.reason.split(' ')[0] ?? 'UNKNOWN';
+    byReason[reasonKey] = (byReason[reasonKey] ?? 0) + 1;
+  }
 
   return {
     trades,
