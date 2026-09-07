@@ -5,10 +5,10 @@ import type { MemeToken } from '../src/types.js';
 
 const base = (): MemeToken => ({
   id: 'Mint111111111111111111111111111111111111111', decimals: 9, symbol: 'TEST', usdPrice: 1,
-  liquidity: 250_000, mcap: 3_000_000, holderCount: 1200, organicScore: 85,
+  liquidity: 1_000_000, mcap: 3_000_000, holderCount: 5000, organicScore: 95,
   firstPool: { id: 'Pool1', createdAt: new Date(Date.now() - 30 * 60_000).toISOString() },
-  audit: { isSus: false, mintAuthorityDisabled: true, freezeAuthorityDisabled: true, topHoldersPercentage: 15, devBalancePercentage: 2 },
-  stats5m: { priceChange: 12, buyVolume: 90_000, sellVolume: 45_000, numBuys: 120, numSells: 70, numNetBuyers: 50 }
+  audit: { isSus: false, mintAuthorityDisabled: true, freezeAuthorityDisabled: true, topHoldersPercentage: 12, devBalancePercentage: 2 },
+  stats5m: { priceChange: 25, buyVolume: 120_000, sellVolume: 40_000, numBuys: 180, numSells: 70, numNetBuyers: 80 }
 });
 
 test('accepts a strong setup', () => {
