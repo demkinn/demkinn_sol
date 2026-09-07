@@ -54,17 +54,26 @@ export async function closePaperPosition(position: Position, state: PortfolioSta
   const slipBps = Math.min(config.paperMaxSlippageBps, 20 + (config.minTradeSol / Math.max(position.remainingCostSol, 0.000001)) * 10);
   const slippageSol = grossSol * slipBps / 10_000;
   const proceeds = Math.max(0, grossSol - feeSol - slippageSol);
-  const costBasis = position.originalCostSol * fraction;
+  const costBasis = position.remainingCostSol * fraction;
   const pnlSol = proceeds - costBasis;
+  const closingFully = fraction >= 0.999;
 
   state.cashSol += proceeds;
   state.realizedPnlSol += pnlSol;
-  if (pnlSol >= 0) state.winningTrades += 1; else state.losingTrades += 1;
   recordTrade(state, { id: id(), mint: position.mint, symbol: position.symbol, side: 'SELL', reason, price, tokenQty: qty, grossSol, feeSol, slippageSol, pnlSol, timestamp: Date.now() });
-  position.tokenQty -= qty;
-  position.remainingCostSol -= costBasis;
-  if (fraction >= 0.999) state.positions = state.positions.filter((p) => p.id !== position.id);
+  position.tokenQty = Math.max(0, position.tokenQty - qty);
+  position.remainingCostSol = Math.max(0, position.remainingCostSol - costBasis);
+
+  if (closingFully || position.tokenQty <= 0.000000000001) {
+    if (pnlSol >= 0) state.winningTrades += 1; else state.losingTrades += 1;
+    state.positions = state.positions.filter((p) => p.id !== position.id);
+  }
   await alert(`DEMКINN PAPER SELL\n${position.symbol} | ${reason}\nPnL ${pnlSol >= 0 ? '+' : ''}${pnlSol.toFixed(4)} SOL\nprice ${price.toExponential(4)}`);
+}
+
+function originalFractionToRemaining(position: Position, originalFraction: number): number {
+  if (position.remainingCostSol <= 0) return 1;
+  return clamp((position.originalCostSol * originalFraction) / position.remainingCostSol, 0.01, 1);
 }
 
 export async function managePaperPosition(position: Position, state: PortfolioState, price: number): Promise<void> {
@@ -75,10 +84,24 @@ export async function managePaperPosition(position: Position, state: PortfolioSt
   const drawdownFromHigh = ((position.highPrice - price) / position.highPrice) * 100;
   const ageMin = (Date.now() - position.openedAt) / 60_000;
 
-  if (!position.tp1Done && pnlPct >= config.tp1Pct) { position.tp1Done = true; await closePaperPosition(position, state, price, `TP1 +${pnlPct.toFixed(1)}%`, config.tp1SellPct / 100); return; }
-  if (!position.tp2Done && pnlPct >= config.tp2Pct && state.positions.some((p) => p.id === position.id)) { position.tp2Done = true; await closePaperPosition(position, state, price, `TP2 +${pnlPct.toFixed(1)}%`, config.tp2SellPct / 100); return; }
-  if (pnlPct <= -config.stopLossPct) { await closePaperPosition(position, state, price, `STOP ${pnlPct.toFixed(1)}%`); return; }
-  if (position.highPrice > position.entryPrice * (1 + config.trailingActivationPct / 100) && drawdownFromHigh >= config.trailingStopPct) { await closePaperPosition(position, state, price, `TRAIL -${drawdownFromHigh.toFixed(1)}% from high`); return; }
+  if (!position.tp1Done && pnlPct >= config.tp1Pct) {
+    position.tp1Done = true;
+    await closePaperPosition(position, state, price, `TP1 +${pnlPct.toFixed(1)}%`, originalFractionToRemaining(position, config.tp1SellPct / 100));
+    return;
+  }
+  if (!position.tp2Done && pnlPct >= config.tp2Pct && state.positions.some((p) => p.id === position.id)) {
+    position.tp2Done = true;
+    await closePaperPosition(position, state, price, `TP2 +${pnlPct.toFixed(1)}%`, originalFractionToRemaining(position, config.tp2SellPct / 100));
+    return;
+  }
+  if (pnlPct <= -config.stopLossPct) {
+    await closePaperPosition(position, state, price, `STOP ${pnlPct.toFixed(1)}%`);
+    return;
+  }
+  if (position.highPrice > position.entryPrice * (1 + config.trailingActivationPct / 100) && drawdownFromHigh >= config.trailingStopPct) {
+    await closePaperPosition(position, state, price, `TRAIL -${drawdownFromHigh.toFixed(1)}% from high`);
+    return;
+  }
   if (ageMin >= config.timeStopMin && pnlPct < 10) await closePaperPosition(position, state, price, `TIME ${ageMin.toFixed(0)}m`);
 }
 
