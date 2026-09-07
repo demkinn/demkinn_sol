@@ -28,6 +28,7 @@ export interface MemeToken {
   liquidity?: number;
   holderCount?: number;
   organicScore?: number;
+  organicScoreLabel?: string;
   isVerified?: boolean | null;
   verification?: string;
   audit?: TokenAudit | null;
@@ -49,24 +50,50 @@ export interface Candidate extends MemeToken {
 }
 
 export interface Position {
+  id: string;
   mint: string;
   symbol: string;
   entryPrice: number;
-  quantity: number;
-  costSol: number;
-  openedAt: number;
+  lastPrice: number;
   highPrice: number;
+  tokenQty: number;
+  remainingCostSol: number;
+  originalCostSol: number;
+  openedAt: number;
+  scoreAtEntry: number;
   tp1Done: boolean;
   tp2Done: boolean;
 }
 
+export interface Trade {
+  id: string;
+  mint: string;
+  symbol: string;
+  side: 'BUY' | 'SELL';
+  reason: string;
+  price: number;
+  tokenQty: number;
+  grossSol: number;
+  feeSol: number;
+  slippageSol: number;
+  pnlSol: number;
+  timestamp: number;
+}
+
 export interface PortfolioState {
-  equitySol: number;
+  version: 2;
   cashSol: number;
+  realizedPnlSol: number;
+  feesSol: number;
+  slippageSol: number;
   dayStartEquitySol: number;
   dayStart: string;
-  positions: Position[];
-  realizedPnlSol: number;
   tradesToday: number;
+  winningTrades: number;
+  losingTrades: number;
   consecutiveFailures: number;
+  paused: boolean;
+  positions: Position[];
+  trades: Trade[];
+  lastScanAt: number;
 }
